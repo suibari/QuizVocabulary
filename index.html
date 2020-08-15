@@ -1,0 +1,163 @@
+<html>
+  <head>
+    <title>TOEIC Quiz</title>
+    <script>
+    var count_q; // 出題回数を記録するグローバル変数
+    var flg_hlt; // 問題チェック済みかを記録するグローバル変数
+    var answer_voc; // 答え（単語）を記録するグローバル変数
+    
+    // 「答えを見る／次の問題」ボタンがクリックされたとき呼び出されるハンドラ---------------
+    function onAnsBtnClick(){
+      
+      const COUNT_REF = 5; // この値以上の出題回数の問題は「問題チェック」ボタンを表示
+      
+      // html読み取り
+      var answer  = document.getElementById("answer");
+      var btn_ans = document.getElementById("btn_ans");
+      var btn_hlt = document.getElementById("btn_hlt");
+      
+      if(answer.style.visibility == "hidden"){
+        // 答えが表示されていない
+        // 答えを表示しボタンを「次の問題」に
+        btn_ans.innerHTML = "次の問題";
+        answer.style.visibility = "visible";
+        // 出題回数が多いなら「問題チェック」ボタンを表示
+        if (count_q >= COUNT_REF) btn_hlt.style.visibility = "visible";
+        if (flg_hlt) btn_hlt.innerHTML = "チェック済み";
+        // Web Speech APIで読み上げ
+        speechTextInLang(answer.innerText, 'en-US')
+      } else {
+        // 答えが表示されているので、問題・答えを取得して答えを非表示にしボタンを「答えを見る」にし有効化する
+        setQuizAndAnswerToHtml();
+      }
+    }
+    
+    // 「問題チェック」ボタンがクリックされたとき読みだされるハンドラ------------------------------
+    function onHighlightBtnClick() {
+    
+      // html読み取り
+      var answer  = document.getElementById("answer");
+      var btn_hlt = document.getElementById("btn_hlt");
+      
+      google.script.run.highlightOrUnHighlightSpecificQuiz(answer_voc);
+      if (btn_hlt.innerHTML == "問題チェック") {
+        btn_hlt.innerHTML = "チェック済み";
+      } else {
+        btn_hlt.innerHTML = "問題チェック";
+      }
+    }
+    
+    // サーバサイド関数を稼働させて、問題・答えを取得しHTMLにセットする関数------------------------
+    function setQuizAndAnswerToHtml() {
+      
+      const threshold = 3; // threshold/10の確立で逆の問題が出る
+      
+      // html読み取り
+      var quiz    = document.getElementById("quiz");
+      var btn_ans = document.getElementById("btn_ans");
+      var answer  = document.getElementById("answer");
+      var count   = document.getElementById("count_q");
+      var btn_hlt = document.getElementById("btn_hlt");
+      
+      google.script.run.withSuccessHandler( function (res) {
+        // サーバ側スクリプトが実効成功したら実行する
+
+        // answerの子要素を全て削除
+      　while (answer.firstChild) answer.removeChild(answer.firstChild);
+
+        var rand = Math.floor(Math.random() * 10);
+        if (rand >= threshold) {
+          var flg_oppositQA = true;
+        } else {
+          var flg_oppositQA = false;
+        }
+        
+        // 問題のセット
+        if (flg_oppositQA) {
+          quiz.innerHTML = res.text_q_en + "</br>" + res.text_q_ja; 
+        } else {
+          quiz.innerHTML = res.text_a + "</br>" + res.text_q_ja; 
+        }
+        // 「答えを見る」ボタンの有効化
+        btn_ans.innerHTML = "答えを見る";
+        btn_ans.style.pointerEvents = "auto";
+        // 回答のセット
+        answer_voc = res.text_a;
+        if (flg_oppositQA) {
+          // aタグを生成
+          var el_a = document.createElement("a");
+              el_a.innerHTML = res.text_a;
+              el_a.href      = "https://ejje.weblio.jp/content/" + res.text_a;
+              el_a.target    = "_blank";
+          answer.appendChild(el_a);
+          
+          //answer.innerHTML = res.text_a;
+          
+        } else {
+          answer.innerHTML = res.text_q_en.replace(/[a-z]_+_/i, res.text_a);
+        }
+        answer.style.visibility = "hidden";
+        // 問題番号・出題回数のセット
+        count_q = res.count;
+        count.innerHTML = "問題番号:" + res.num + "／出題回数:" + res.count;
+        // 「問題チェック」ボタンを隠す
+        btn_hlt.innerHTML = "問題チェック";
+        btn_hlt.style.visibility = "hidden";
+        // チェック済み問題かの確認
+        flg_hlt = res.isHL;
+        
+      }).getQuizAndAnswer(answer.innerHTML);
+      
+      // サーバ側スクリプト実行の間、ボタンの状態を「読み込み中」にする
+      btn_ans.innerHTML = "読み込み中...";
+      btn_ans.style.pointerEvents = "none";
+      
+    }
+    
+    // Web Speech APIによる読み上げを行う関数---------------------------------------------
+    function speechTextInLang (text, lang) {
+      
+      var speech   = new SpeechSynthesisUtterance();
+      var voices   = window.speechSynthesis.getVoices();
+        
+      speech.text  = text;
+      speech.lang  = lang;
+      for (var i = 0; i < voices.length; i++) { // ブラウザによってvoicesの中身が異なるので掃引比較する
+        if (voices[i].lang == lang) speech.voice = voices[i];
+      }
+      
+      speechSynthesis.speak(speech);
+    };
+    
+    </script>
+  </head>
+  <body>
+    <table style="width: 100%;" cellspacing="100" cellpadding="0">
+      <tbody>
+        <tr>
+          <td style="vertical-align: top;" align="left">
+            <div id="quiz" style="font-size: 300%; margin-bottom: 20px;"><br></div>
+            <div id="count_q" style="font-size: 120%; text-align: right;"><br></div>
+          </td>
+        </tr>
+        <tr>
+          <td style="vertical-align: top;" align="left">
+            <button type="button" id="btn_ans" style="width: 100%; height: 200%; color: white; background: rgb(80, 184, 216) none repeat scroll 0% 0%; font-size: 300%;" onclick="onAnsBtnClick()">答えを見る</button>
+          </td>
+        </tr>
+        <tr>
+          <td style="vertical-align: top;" align="left">
+            <div id="answer" style="font-size: 300%;"></div>
+            <button type="button" id="btn_hlt" style="width: auto; height: 100%; color: white; background: rgb(80, 184, 216) none repeat scroll 0% 0%; font-size: 120%; float: right; visibility: hidden;" onclick="onHighlightBtnClick()">問題をチェック</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <script>
+    
+    // 最初にHTMLが読み込まれたときに問題・答えを設定する
+    setQuizAndAnswerToHtml();
+    
+    </script>
+  </body>
+</html>
